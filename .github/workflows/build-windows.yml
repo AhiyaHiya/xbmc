@@ -1,0 +1,71 @@
+name: Build Kodi for Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      architecture:
+        description: 'Target architecture'
+        required: true
+        default: 'x64'
+        type: choice
+        options:
+        - x64
+        - win32
+        - arm64
+        - x64-uwp
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'Release'
+        type: choice
+        options:
+        - Release
+        - Debug
+        - RelWithDebInfo
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    strategy:
+      fail-fast: true
+
+    steps:
+    - name: Checkout Kodi source
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set reusable strings
+      id: strings
+      shell: pwsh
+      run: |
+        echo "build-output-dir=${{ github.workspace }}/build" >> $env:GITHUB_OUTPUT
+
+    - name: Setup Windows build environment
+      shell: pwsh
+      run: |
+        $archFolder = "${{ github.event.inputs.architecture }}"
+
+        Set-Location "${{ github.workspace }}/tools/buildsteps/windows/$archFolder"
+
+        Write-Host "=== Downloading dependencies ==="
+        & ./download-dependencies.bat
+
+        Write-Host "=== Setting up MSYS2 ==="
+        & ./download-msys2.bat
+
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Error occured with exit code $LASTEXITCODE"
+          exit 1
+        }
+
+    - name: Build
+      shell: pwsh
+      run: |
+        $archFolder = "${{ github.event.inputs.architecture }}"
+
+        Set-Location "${{ github.workspace }}/tools/buildsteps/windows/$archFolder"
+
+        Write-Host "=== Building Kodi for $archFolder (${{ github.event.inputs.build_type }}) ==="
+        & ./BuildSetup.bat
