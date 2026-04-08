@@ -1,0 +1,83 @@
+name: Build Kodi for Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'Release'
+        type: choice
+        options:
+        - Release
+        - Debug
+        - RelWithDebInfo
+
+jobs:
+  build:
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: Windows
+            arch: x64
+            runner: windows-latest
+            generator: "Visual Studio 17 2022"
+            cmake_arch: x64
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set reusable strings
+      id: strings
+      shell: pwsh
+      run: |
+        echo "build-output-dir=${{ github.workspace }}/build" >> $env:GITHUB_OUTPUT
+
+    # === Fix 1: Clean PowerShell environment (prevents your profile from breaking Get-FileHash etc.) ===
+    - name: Setup clean PowerShell environment
+      shell: pwsh
+      run: |
+        # Backup profile if it exists to avoid oh-my-posh / Set-PoshPrompt interference
+        if (Test-Path $PROFILE) {
+          Rename-Item -Path $PROFILE -NewName "Microsoft.PowerShell_profile.ps1.bak" -Force -ErrorAction SilentlyContinue
+          Write-Host "Temporarily disabled PowerShell profile to prevent non-interactive errors"
+        }
+
+    - name: Setup Windows build environment
+      if: matrix.platform == 'Windows'
+      shell: pwsh
+      run: |
+        $archFolder = 'x64'   # change to 'win32' or 'arm64' if needed
+
+        Set-Location "${{ github.workspace }}/tools/buildsteps/windows/$archFolder"
+
+        Write-Host "=== Downloading dependencies ==="
+        & ./download-dependencies.bat
+
+        Write-Host "=== Setting up MSYS2 ==="
+        & ./download-msys2.bat
+
+        Write-Host "=== Building MinGW libraries (FFmpeg, etc.) — this can take 15–40+ minutes ==="
+        # Run with clean profile to avoid your OneDrive PowerShell profile issues
+        powershell -NoProfile -ExecutionPolicy Bypass -Command "& ./make-mingwlibs.bat noprompt"
+
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "make-mingwlibs.bat failed with exit code $LASTEXITCODE"
+          exit 1
+        }
+
+    - name: Configure CMake
+      run: >
+        cmake -B "${{ steps.strings.outputs.build-output-dir }}"
+        -G "${{ matrix.generator }}"
+        -A ${{ matrix.cmake_arch }}
+        -S ${{ github.workspace }}
+
+    - name: Build
+      run: >
+        cmake --build "${{ steps.strings.outputs.build-output-dir }}"
+        --config ${{ github.event.inputs.build_type || 'Release' }}
+        -- /m   # Use all available processors
