@@ -1,0 +1,73 @@
+name: Build Kodi for Ubuntu
+
+on:
+  workflow_dispatch:          # Manual trigger from GitHub UI
+    inputs:
+      build_type:
+        description: 'Build type (Debug or Release)'
+        required: true
+        default: 'Release'
+        type: choice
+        options:
+        - Debug
+        - Release
+      window_system:
+        description: 'Window system to build for'
+        required: true
+        default: 'Wayland'
+        type: choice
+        options:
+          - Wayland
+          - X11
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: true
+
+    steps:
+    - name: Checkout Kodi source
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Get Ubuntu build dependencies
+      shell: bash
+      run: |
+        apt-get update && apt-get install -y \
+          build-essential \
+          gcc \
+          g++ \
+          gdc \
+          nasm \
+          ninja-build \
+          cmake \
+          autoconf autoconf-archive automake libtool libtool-bin \
+          libgles2-mesa-dev libgl1-mesa-dev libglu1-mesa-dev \
+          libdrm-dev \
+          curl \
+          wget \
+          zip \
+          unzip \
+          tar \
+          pkg-config \
+          python3-dev \
+          python3-pip
+
+        rm -rf /var/lib/apt/lists/*
+
+        apt-get install -y \
+          bison \
+          flex \
+          libudev-dev \
+          libcdio-dev \
+          default-jre \
+          swig \
+          python3-venv
+
+    - name: Build Kodi vcpkg
+      shell: bash
+      run: |
+        build-vcpkg.sh
