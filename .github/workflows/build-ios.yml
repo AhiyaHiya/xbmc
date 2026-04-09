@@ -1,0 +1,71 @@
+name: Build Kodi for iOS
+
+on:
+  workflow_dispatch:          # Manual trigger from GitHub UI
+    inputs:
+      build_type:
+        description: 'Build type (Debug or Release)'
+        required: true
+        default: 'Release'
+        type: choice
+        options:
+        - Debug
+        - Release
+jobs:
+  build-ios:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [ macos-26-intel, macos-26 ]
+
+    steps:
+    - name: Checkout Kodi source
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Bootstrap and configure depends (tools + libraries)
+      working-directory: ${{ github.workspace }}/tools/depends
+      run: |
+        ./bootstrap
+        ./configure \
+          --host=aarch64-apple-darwin \
+          --with-platform=ios \
+          --enable-debug=${{ github.event.inputs.build_type == 'Debug' && 'yes' || 'no' }}
+
+    - name: Build dependencies (this step is long!)
+      working-directory: ${{ github.workspace }}/tools/depends
+      run: |
+        make -j$(sysctl -n hw.ncpu)
+
+    - name: Generate Xcode project
+      run: |
+        mkdir -p kodi-build
+        make -C ${{ github.workspace }}/tools/depends/target/cmakebuildsys \
+          BUILD_DIR=$PWD/kodi-build \
+          CMAKE_EXTRA_ARGUMENTS="-DENABLE_XCODE_ADDONBUILD=ON"
+
+    - name: Build Kodi
+      working-directory: kodi-build
+      run: |
+        xcodebuild \
+          -project kodi.xcodeproj \
+          -config ${{ github.event.inputs.build_type || 'Release' }} \
+          -jobs $(sysctl -n hw.ncpu)
+
+    - name: Package deb (for jailbroken devices)
+      working-directory: kodi-build
+      run: |
+        xcodebuild -target deb -config ${{ github.event.inputs.build_type || 'Release' }}
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: kodi-ios-${{ github.event.inputs.build_type || 'Release' }}
+        path: |
+          kodi-build/*.deb
+          kodi-build/*.ipa   # if generated
+          kodi-build/kodi.xcodeproj
+        retention-days: 7
