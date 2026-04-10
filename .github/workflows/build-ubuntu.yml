@@ -49,12 +49,16 @@ jobs:
 
         rm -rf /var/lib/apt/lists/*
 
-    - name: Setup vcpkg
-      uses: lukka/run-vcpkg@v11
-      with:
-        vcpkgGitCommitId: ''          # Leave empty to use vcpkg from submodule or latest (better to pin via submodule)
-        # If you don't use a submodule, you can specify a commit:
-        # vcpkgGitCommitId: '2025.XX.XX'   # replace with a recent stable commit
+    - name: Bootstrap vcpkg
+      shell: bash
+      run: |
+        if [ ! -d "vcpkg" ]; then
+          echo "vcpkg directory not found. Make sure submodules are checked out."
+          exit 1
+        fi
+        cd vcpkg
+        ./bootstrap-vcpkg.sh --disableMetrics
+        echo "VCPKG_ROOT=$(pwd)" >> $GITHUB_ENV
 
     - name: Configure and Build Kodi
       shell: bash
@@ -63,7 +67,7 @@ jobs:
 
         cmake -S . -B kodi-build \
           -G Ninja \
-          -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake" \
+          -DCMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" \
           -DCMAKE_BUILD_TYPE=${{ inputs.build_type }} \
           -DAPP_RENDER_SYSTEM=gl \
           -DENABLE_INTERNAL_FFMPEG=OFF \
