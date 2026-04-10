@@ -45,6 +45,7 @@ jobs:
           libdrm-dev \
           git curl wget zip unzip tar pkg-config \
           python3-dev python3-pip \
+          mesa-common-dev \
           bison flex libudev-dev libcdio-dev default-jre swig python3-venv
 
         rm -rf /var/lib/apt/lists/*
@@ -52,8 +53,11 @@ jobs:
     - name: Bootstrap vcpkg
       shell: bash
       run: |
+        echo "Attempting to bootstrap vcpkg for dependency management"
+        git submodule update --init --recursive
+
         if [ ! -d "vcpkg" ]; then
-          echo "vcpkg directory not found. Make sure submodules are checked out."
+          echo "ERROR: vcpkg directory not found. Make sure submodules are in repo."
           exit 1
         fi
         cd vcpkg
