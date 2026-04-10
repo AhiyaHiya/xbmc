@@ -1,7 +1,7 @@
 name: Build Kodi for Ubuntu
 
 on:
-  workflow_dispatch:          # Manual trigger from GitHub UI
+  workflow_dispatch:
     inputs:
       build_type:
         description: 'Build type (Debug or Release)'
@@ -24,9 +24,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    strategy:
-      fail-fast: true
-
     steps:
     - name: Checkout Kodi source
       uses: actions/checkout@v4
@@ -37,7 +34,8 @@ jobs:
     - name: Get Ubuntu build dependencies
       shell: bash
       run: |
-        apt-get update && apt-get install -y \
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends \
           build-essential \
           gcc g++ nasm ninja-build cmake \
           autoconf autoconf-archive automake libtool libtool-bin \
@@ -48,19 +46,23 @@ jobs:
           mesa-common-dev \
           bison flex libudev-dev libcdio-dev default-jre swig python3-venv
 
+        sudo rm -rf /var/lib/apt/lists/*
+
     - name: Bootstrap vcpkg
       shell: bash
       run: |
-        echo "Attempting to bootstrap vcpkg for dependency management"
+        echo "Bootstrapping vcpkg..."
         git submodule update --init --recursive
 
         if [ ! -d "vcpkg" ]; then
-          echo "ERROR: vcpkg directory not found. Make sure submodules are in repo."
+          echo "ERROR: vcpkg directory not found after submodule update."
           exit 1
         fi
+
         cd vcpkg
         ./bootstrap-vcpkg.sh --disableMetrics
         echo "VCPKG_ROOT=$(pwd)" >> $GITHUB_ENV
+        echo "VCPKG_ROOT set to: $(pwd)"
 
     - name: Configure and Build Kodi
       shell: bash
